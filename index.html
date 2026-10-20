@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>artigos e poemas | mário biluk & virgula</title>
+<title>mario biluk & virgula | artigos e poemas</title>
 <style>
   :root {
     --bg:    #ffffff;
@@ -66,6 +66,40 @@
   nav button:hover { color: var(--fg); }
   nav button.active { color: var(--fg); }
   #addBtn { color: var(--fg); font-weight: 700; }
+
+  /* ---------- FILTRO DE AUTOR ---------- */
+  .author-filter {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: 16px 0 12px;
+  }
+  .author-filter .filter-label {
+    font-family: var(--sans);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+  }
+  .author-filter button {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+  .author-filter button:hover { color: var(--fg); }
+  .author-filter button.active {
+    color: var(--fg);
+    text-decoration: underline;
+    text-underline-offset: 5px;
+    text-decoration-thickness: 1px;
+  }
 
   /* ---------- LISTA ---------- */
   main {
@@ -297,6 +331,8 @@
     .nav-cats { gap: 22px; }
     .nav-actions { gap: 16px; }
 
+    .author-filter { gap: 14px; padding: 14px 0 8px; }
+
     li a {
       grid-template-columns: 1fr auto;
       grid-template-areas:
@@ -326,7 +362,6 @@
   <nav>
     <div class="nav-cats" id="navCats">
       <button data-cat="artigos">Artigos</button>
-      <button data-cat="poemas">Poemas</button>
       <button data-cat="letras">Letras</button>
     </div>
     <div class="nav-actions">
@@ -334,6 +369,12 @@
       <button id="authBtn">Entrar</button>
     </div>
   </nav>
+
+  <!-- Filtro por autor (preenchido via JS com AUTHOR_FILTERS) -->
+  <div class="author-filter" id="authorFilter">
+    <span class="filter-label">autor</span>
+    <button data-author="" class="active">todos</button>
+  </div>
 </header>
 
 <main>
@@ -377,7 +418,6 @@
           <label for="fCategory">Categoria</label>
           <select id="fCategory" name="category" required>
             <option value="artigos">Artigo</option>
-            <option value="poemas">Poema</option>
             <option value="letras">Letra</option>
           </select>
         </div>
@@ -406,7 +446,7 @@
 
 <script>
   /* ============================================================
-     CONFIGURAÇÃO DO JSONBIN — já preenchida.
+     CONFIGURAÇÃO DO JSONBIN — já preenchida, mantém o mesmo bin.
      ============================================================ */
   const JSONBIN_CONFIG = {
     binId:    '6ad7c88bffd5d160537d305b',
@@ -416,7 +456,6 @@
 
   /* ============================================================
      CREDENCIAIS DO PAINEL (login superficial)
-     Troque quando quiser.
      ============================================================ */
   const ADMIN_USER = 'admin';
   const ADMIN_PASS = 'admin123';
@@ -427,7 +466,19 @@
   const KEY_AUTH = 'repositorio_auth_v1';
 
   /* ============================================================
-     POSTS DE EXEMPLO — usados só se o JSONBin estiver vazio
+     FILTROS DE AUTOR
+     Adicione/remova autores aqui. Cada entrada:
+       label → o que aparece no botão
+       match → trecho normalizado (sem acento, minúsculo) que
+               será buscado (substring) no campo "author".
+     ============================================================ */
+  const AUTHOR_FILTERS = [
+    { label: 'Mário Biluk', match: 'mario biluk' },
+    { label: 'Vírgula',     match: 'virgula' }
+  ];
+
+  /* ============================================================
+     POSTS DE EXEMPLO — só aparecem se o bin estiver vazio
      ou inacessível. Somem no primeiro post real.
      ============================================================ */
   const seedPosts = [
@@ -436,20 +487,20 @@
       title: 'Sobre a queda dos impérios',
       subtitle: 'Notas sobre ciclos históricos',
       category: 'artigos', author: 'Redação',
-      content: 'Ao longo da história, os grandes sistemas raramente ruem de um só golpe. Ruem por dentro, lentamente, sob o peso das próprias contradições.\n\nEste é um texto de exemplo. Assim que você adicionar seu primeiro post real pelo painel, esta mensagem deixa de aparecer.'
+      content: 'Ao longo da história, os grandes sistemas raramente ruem de um só golpe. Ruem por dentro, lentamente, sob o peso das próprias contradições.\n\nEste é um texto de exemplo. Assim que você adicionar seu primeiro post real, esta mensagem deixa de aparecer.'
     },
     {
       id: 'seed-2', date: '2024-11-02',
-      title: 'O que resta depois da memória',
-      category: 'poemas', author: 'Redação',
-      content: 'Depois que a memória se vai,\nresta a sombra do que houve —\numa parede branca,\numa cadeira vazia.'
+      title: 'Canção para um fim de tarde',
+      category: 'letras', author: 'Redação',
+      content: 'A tarde cai devagar\nsobre a cidade cansada;\nalguém ainda espera\no fim de uma outra jornada.'
     }
   ];
 
   /* ============================================================
      UTILITÁRIOS
      ============================================================ */
-  const catLabel = { artigos: 'artigo', poemas: 'poema', letras: 'letra' };
+  const catLabel = { artigos: 'artigo', letras: 'letra', poemas: 'poema' };
   const months = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 
   function fmtDate(iso) {
@@ -470,33 +521,36 @@
     return 'p-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   }
 
+  // Remove acentos e caixa alta para busca de autor.
+  function norm(s) {
+    return String(s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
   /* ============================================================
      JSONBIN — camada de dados
      ============================================================ */
   const JSONBIN_BASE = 'https://api.jsonbin.io/v3/b';
 
-  // Descarta o item placeholder usado para o bin não nascer vazio.
   function stripPlaceholder(list) {
     if (!Array.isArray(list)) return [];
     return list.filter(item => item && !item._placeholder);
   }
 
   async function fetchPosts() {
-    const res = await fetch(`${JSONBIN_BASE}/${JSONBIN_CONFIG.binId}/latest`, {
-      headers: { 'X-Access-Key': JSONBIN_CONFIG.readKey }
-    });
-    if (!res.ok) {
-      throw new Error(`JSONBin GET falhou (${res.status})`);
-    }
+    const res = await fetch(
+      `${JSONBIN_BASE}/${JSONBIN_CONFIG.binId}/latest?ts=${Date.now()}`,
+      { headers: { 'X-Access-Key': JSONBIN_CONFIG.readKey } }
+    );
+    if (!res.ok) throw new Error(`JSONBin GET falhou (${res.status})`);
     const json = await res.json();
     return stripPlaceholder(json.record);
   }
 
   async function putPosts(posts) {
-    // JSONBin rejeita [] no PUT — se por algum motivo a lista
-    // ficar vazia, envia o placeholder.
     const payload = posts.length ? posts : [{ _placeholder: true }];
-
     const res = await fetch(`${JSONBIN_BASE}/${JSONBIN_CONFIG.binId}`, {
       method: 'PUT',
       headers: {
@@ -505,9 +559,7 @@
       },
       body: JSON.stringify(payload)
     });
-    if (!res.ok) {
-      throw new Error(`JSONBin PUT falhou (${res.status})`);
-    }
+    if (!res.ok) throw new Error(`JSONBin PUT falhou (${res.status})`);
     const json = await res.json();
     return stripPlaceholder(json.record);
   }
@@ -516,11 +568,12 @@
      ESTADO EM MEMÓRIA
      ============================================================ */
   let allPosts = [];
-  let active = null;
+  let activeCat = null;
+  let activeAuthor = null;
   let loadError = null;
 
   /* ============================================================
-     AUTH (superficial — só UI)
+     AUTH
      ============================================================ */
   function isLoggedIn() { return localStorage.getItem(KEY_AUTH) === '1'; }
   function doLogin(u, p) {
@@ -558,6 +611,7 @@
   const listEl        = document.getElementById('list');
   const navCats       = document.getElementById('navCats');
   const catButtons    = navCats.querySelectorAll('button');
+  const authorFilterEl = document.getElementById('authorFilter');
   const addBtn        = document.getElementById('addBtn');
   const authBtn       = document.getElementById('authBtn');
   const loginModal    = document.getElementById('loginModal');
@@ -569,6 +623,17 @@
   const loginError    = document.getElementById('loginError');
   const addError      = document.getElementById('addError');
   const addSubmit     = document.getElementById('addSubmit');
+
+  /* ============================================================
+     CONSTRÓI OS BOTÕES DE FILTRO DE AUTOR
+     ============================================================ */
+  AUTHOR_FILTERS.forEach(f => {
+    const btn = document.createElement('button');
+    btn.dataset.author = f.match;
+    btn.textContent = f.label;
+    authorFilterEl.appendChild(btn);
+  });
+  const authorButtons = authorFilterEl.querySelectorAll('button');
 
   /* ============================================================
      RENDER
@@ -583,13 +648,24 @@
       listEl.appendChild(li);
     }
 
-    const data = (active ? allPosts.filter(p => p.category === active) : allPosts.slice())
-      .sort((a, b) => b.date.localeCompare(a.date));
+    let data = allPosts.slice();
+
+    if (activeCat) {
+      data = data.filter(p => p.category === activeCat);
+    }
+
+    if (activeAuthor) {
+      data = data.filter(p => norm(p.author).includes(activeAuthor));
+    }
+
+    data.sort((a, b) => b.date.localeCompare(a.date));
 
     if (!data.length) {
       const li = document.createElement('li');
       li.className = 'empty';
-      li.textContent = '— vazio';
+      li.textContent = allPosts.length === 0
+        ? '— vazio'
+        : '— nenhum resultado para este filtro';
       listEl.appendChild(li);
       return;
     }
@@ -636,12 +712,31 @@
   }
 
   /* ============================================================
-     NAV / FILTROS
+     FILTRO: CATEGORIA
      ============================================================ */
   catButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      active = (active === btn.dataset.cat) ? null : btn.dataset.cat;
-      catButtons.forEach(b => b.classList.toggle('active', b.dataset.cat === active));
+      activeCat = (activeCat === btn.dataset.cat) ? null : btn.dataset.cat;
+      catButtons.forEach(b => b.classList.toggle('active', b.dataset.cat === activeCat));
+      render();
+    });
+  });
+
+  /* ============================================================
+     FILTRO: AUTOR (combina com o de categoria)
+     ============================================================ */
+  authorButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.dataset.author || null;
+      if (val && val === activeAuthor) {
+        activeAuthor = null;
+      } else {
+        activeAuthor = val;
+      }
+      authorButtons.forEach(b => {
+        const bVal = b.dataset.author || null;
+        b.classList.toggle('active', bVal === activeAuthor);
+      });
       render();
     });
   });
